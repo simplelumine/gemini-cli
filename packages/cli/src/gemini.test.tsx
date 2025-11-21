@@ -494,6 +494,86 @@ describe('validateDnsResolutionOrder', () => {
   });
 });
 
+describe('checkMouseSupport', () => {
+  let originalIsTTY: boolean | undefined;
+  let originalEnvTerm: string | undefined;
+  let originalEnvTermProgram: string | undefined;
+  let originalEnvCI: string | undefined;
+  let originalPlatform: string;
+
+  beforeEach(() => {
+    originalIsTTY = process.stdout.isTTY;
+    originalEnvTerm = process.env['TERM'];
+    originalEnvTermProgram = process.env['TERM_PROGRAM'];
+    originalEnvCI = process.env['CI'];
+    originalPlatform = process.platform;
+
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    // Clear CI for these tests unless specifically tested
+    delete process.env['CI'];
+  });
+
+  afterEach(() => {
+    if (originalIsTTY !== undefined) {
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+    }
+    process.env['TERM'] = originalEnvTerm;
+    process.env['TERM_PROGRAM'] = originalEnvTermProgram;
+    process.env['CI'] = originalEnvCI;
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+
+  it('should return false if not TTY', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: false });
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(false);
+  });
+
+  it('should return false if CI environment', async () => {
+    process.env['CI'] = 'true';
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(false);
+  });
+
+  it('should return false for dumb terminal', async () => {
+    process.env['TERM'] = 'dumb';
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(false);
+  });
+
+  it('should return true for known good TERM_PROGRAM', async () => {
+    process.env['TERM_PROGRAM'] = 'vscode';
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(true);
+  });
+
+  it('should return true for known good TERM', async () => {
+    process.env['TERM'] = 'xterm-256color';
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(true);
+  });
+
+  it('should return true for Windows platform', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    process.env['TERM'] = 'unknown'; // ensure TERM check doesn't pass
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(true);
+  });
+
+  it('should return false for unknown terminal', async () => {
+    process.env['TERM'] = 'unknown-term';
+    delete process.env['TERM_PROGRAM'];
+    const { checkMouseSupport } = await import('./gemini.js');
+    expect(checkMouseSupport()).toBe(false);
+  });
+});
+
 describe('startInteractiveUI', () => {
   // Mock dependencies
   const mockConfig = {
@@ -517,6 +597,10 @@ describe('startInteractiveUI', () => {
     geminiMdFileCount: 0,
   };
 
+  vi.mock('./ui/hooks/useAlternateBuffer.js', () => ({
+    isAlternateBufferEnabled: vi.fn(() => true),
+  }));
+
   vi.mock('./utils/version.js', () => ({
     getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
   }));
@@ -537,7 +621,33 @@ describe('startInteractiveUI', () => {
     registerSyncCleanup: vi.fn(),
   }));
 
+  let originalIsTTY: boolean | undefined;
+
+  beforeEach(() => {
+    originalIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    // Ensure TERM supports mouse for tests expecting alternate buffer
+    process.env['TERM'] = 'xterm-256color';
+    // Ensure CI doesn't disable mouse support
+    delete process.env['CI'];
+  });
   afterEach(() => {
+    if (originalIsTTY !== undefined) {
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+    } else {
+      // Assuming undefined meant it was missing or we just want to reset.
+      // If original was undefined, we might want to delete it or set to undefined.
+      // But usually isTTY is present on process.stdout.
+      // Safest to just restore whatever value.
+    }
+    // Clean up TERM env
+    delete process.env['TERM'];
     vi.restoreAllMocks();
   });
 

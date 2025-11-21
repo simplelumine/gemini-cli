@@ -164,6 +164,74 @@ ${reason.stack}`
   });
 }
 
+/**
+ * Checks if the terminal supports mouse interactions using heuristics.
+ * This avoids external dependencies by checking known environment variables.
+ */
+export function checkMouseSupport(): boolean {
+  if (!process.stdout.isTTY) {
+    return false;
+  }
+
+  // CI environments usually don't support mouse interaction properly
+  if (process.env['CI']) {
+    return false;
+  }
+
+  const term = process.env['TERM'] || '';
+  const termProgram = process.env['TERM_PROGRAM'] || '';
+
+  // Known incompatible terminals
+  if (['dumb', 'cons25', 'emacs'].includes(term)) {
+    return false;
+  }
+
+  // Check TERM_PROGRAM for known modern terminals
+  const mouseSupportingPrograms = [
+    'Apple_Terminal',
+    'iTerm.app',
+    'vscode',
+    'WarpTerminal',
+    'Hyper',
+    'Alacritty',
+    'WezTerm',
+    'Ghostty',
+    'kitty',
+    'Terminus',
+    'FluentTerminal',
+  ];
+
+  if (mouseSupportingPrograms.some((prog) => termProgram.includes(prog))) {
+    return true;
+  }
+
+  // Check TERM patterns
+  // xterm, screen, tmux, rxvt, etc. usually support mouse
+  const mouseSupportingTerminals = [
+    /^xterm/,
+    /^screen/,
+    /^tmux/,
+    /^rxvt/,
+    /^vte/,
+    /^gnome/,
+    /^konsole/,
+    /^cygwin/,
+    /^alacritty/,
+    /^kitty/,
+  ];
+
+  if (mouseSupportingTerminals.some((regex) => regex.test(term))) {
+    return true;
+  }
+
+  // Modern Windows environments (Windows Terminal, Conhost in Win 10+) support mouse
+  if (process.platform === 'win32') {
+    return true;
+  }
+
+  return false;
+}
+
 export async function startInteractiveUI(
   config: Config,
   settings: LoadedSettings,
@@ -172,12 +240,18 @@ export async function startInteractiveUI(
   resumedSessionData: ResumedSessionData | undefined,
   initializationResult: InitializationResult,
 ) {
+  const supportMouse = checkMouseSupport();
+  if (config.getDebugMode()) {
+    debugLogger.debug('supportMouse: ' + supportMouse);
+  }
   // Never enter Ink alternate buffer mode when screen reader mode is enabled
   // as there is no benefit of alternate buffer mode when using a screen reader
   // and the Ink alternate buffer mode requires line wrapping harmful to
   // screen readers.
   const useAlternateBuffer =
-    isAlternateBufferEnabled(settings) && !config.getScreenReader();
+    supportMouse &&
+    isAlternateBufferEnabled(settings) &&
+    !config.getScreenReader();
   const mouseEventsEnabled = useAlternateBuffer;
   if (mouseEventsEnabled) {
     enableMouseEvents();
