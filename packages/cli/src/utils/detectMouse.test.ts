@@ -55,35 +55,4 @@ describe('getMouseSupport', () => {
     const support = getMouseSupport();
     expect(support.mouse).toBe(true);
   });
-
-  describe('Windows (win32)', () => {
-    beforeEach(() => {
-      Object.defineProperty(process, 'platform', { value: 'win32' });
-    });
-
-    it('should return true for Windows Terminal (WT_SESSION)', () => {
-      process.env['WT_SESSION'] = 'session-id';
-      const support = getMouseSupport();
-      expect(support.mouse).toBe(true);
-      expect(support.mouseProtocol).toBe('xterm');
-    });
-
-    it('should return false for ConEmu (Cmder) (ConEmuPID) even if other vars are set', () => {
-      process.env['ConEmuPID'] = '1234';
-      process.env['WT_SESSION'] = 'session-id'; // Conflicting signal
-      const support = getMouseSupport();
-      expect(support.mouse).toBe(false);
-    });
-
-    it('should return true if TERM_PROGRAM is vscode on Windows', () => {
-      process.env['TERM_PROGRAM'] = 'vscode';
-      const support = getMouseSupport();
-      expect(support.mouse).toBe(true);
-    });
-
-    it('should return false for generic windows console without signals', () => {
-      const support = getMouseSupport();
-      expect(support.mouse).toBe(false);
-    });
-  });
 });

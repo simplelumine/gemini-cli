@@ -247,32 +247,6 @@ export function getMouseSupport(): MouseSupport {
     result.mouseProtocol = 'gpm';
   }
 
-  // Add Windows support manually as it was requested by the user previously
-
-  // and the library extraction might be old or not covering it
-
-  if (process.platform === 'win32') {
-    // Cmder/ConEmu does NOT support mouse correctly in this context, so explicit disable.
-
-    if (process.env['ConEmuPID']) {
-      result.mouse = false;
-
-      result.mouseProtocol = 'none';
-
-      return result;
-    }
-
-    if (process.env['WT_SESSION'] || process.env['TERM_PROGRAM'] === 'vscode') {
-      result.mouse = true;
-
-      // We can assume xterm for these modern windows terminals
-
-      if (result.mouseProtocol === 'none') {
-        result.mouseProtocol = 'xterm';
-      }
-    }
-  }
-
   return result;
 }
 
@@ -286,20 +260,7 @@ export async function detectMouseSupport(timeout = 300): Promise<boolean> {
     return false;
   }
 
-  // Explicitly disable for ConEmu (Cmder) based on user reports of issues
-  if (process.env['ConEmuPID']) {
-    return false;
-  }
-
-  // 2. Platform shortcuts
-  // Windows Terminal (WT_SESSION) and VSCode are known to work well.
-  if (process.platform === 'win32') {
-    if (process.env['WT_SESSION'] || process.env['TERM_PROGRAM'] === 'vscode') {
-      return true;
-    }
-  }
-
-  // 3. Active Query (The "Sequence" Method)
+  // 2. Active Query (The "Sequence" Method)
   // We send Primary Device Attributes (\x1b[c).
   // If the terminal responds, it supports escape sequences.
   // Almost all terminals that support mouse also support DA queries.
@@ -312,7 +273,7 @@ export async function detectMouseSupport(timeout = 300): Promise<boolean> {
     // Timeout or error
   }
 
-  // 4. Fallback to Heuristics if active query fails (or times out)
+  // 3. Fallback to Heuristics if active query fails (or times out)
   // This covers cases where stdin/out might be intercepted or very slow.
   const heuristic = getMouseSupport();
   return heuristic.mouse;
